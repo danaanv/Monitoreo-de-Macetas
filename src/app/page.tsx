@@ -17,9 +17,9 @@ export default function Dashboard() {
     switch (activeTab) {
       case "PRINCIPAL":
         return <PrincipalContent />;
-      case "DEVICES":
+      case "DISPOSITIVOS":
         return <DevicesContent />;
-      case "STATISTICS":
+      case "ESTADISTICAS":
       default:
         return <StatisticsContent />;
     }
