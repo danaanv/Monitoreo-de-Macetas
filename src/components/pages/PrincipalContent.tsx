@@ -1,116 +1,212 @@
 // components/pages/PrincipalContent.tsx
 import GaugeCard from "@/components/ui/GaugeCard";
-import { Thermometer, Lightbulb } from "lucide-react";
+import { Thermometer, Lightbulb, Droplet } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ref, get, child } from "firebase/database";
+import { ref, onValue, query, limitToLast } from "firebase/database";
 import { db } from "@/firebaseConfig"; // Asegúrate de que `db` sea la instancia de Realtime Database
+import { Line } from "react-chartjs-2";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from "chart.js";
+
+// Registrar componentes de Chart.js
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 export default function PrincipalContent() {
-  const [tempData, setTempData] = useState<{ time: string; value: number }[]>([]);
-  const [humidityData, setHumidityData] = useState<{ time: string; value: number }[]>([]);
+  const [sensorData, setSensorData] = useState<{ [sensorId: string]: { temperature: any[]; humidity: any[] } }>({});
+  const [activeSensor, setActiveSensor] = useState<string | null>(null); // Sensor activo para las pestañas
+
+  // Función para convertir el timestamp a la hora local de Perú
+  const formatTime = (timestamp: number) => {
+    const peruTimezone = "America/Lima"; // Zona horaria de Perú
+    const date = new Date(timestamp * 1000); // Convertir de segundos a milisegundos
+    return new Intl.DateTimeFormat("es-PE", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false, // Formato 24 horas
+      timeZone: peruTimezone,
+    }).format(date);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const dbRef = ref(db); // Use the Database instance directly
+    // Escuchar cambios en tiempo real para todos los sensores
+    const sensorsRef = ref(db, "sensors");
+    const sensorsListener = onValue(sensorsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const sensors = snapshot.val();
+        const updatedSensorData: { [sensorId: string]: { temperature: any[]; humidity: any[] } } = {};
 
-        // Obtén los datos de temperatura
-        const tempSnapshot = await get(child(dbRef, "temperature"));
-        const tempArray = tempSnapshot.exists()
-          ? Object.values(tempSnapshot.val()).map((item: any) => ({
-              time: item.time,
-              value: item.value,
-            }))
-          : [];
+        Object.keys(sensors).forEach((sensorId) => {
+          // Query para obtener los últimos 15 registros de temperatura
+          const tempQuery = query(ref(db, `sensors/${sensorId}/temperature`), limitToLast(15));
+          onValue(tempQuery, (tempSnapshot) => {
+            const temperature = tempSnapshot.exists()
+              ? Object.values(tempSnapshot.val()).map((item: any) => ({
+                  time: Number(item.time),
+                  value: item.value,
+                }))
+              : [];
 
-        // Obtén los datos de humedad
-        const humiditySnapshot = await get(child(dbRef, "humidity"));
-        const humidityArray = humiditySnapshot.exists()
-          ? Object.values(humiditySnapshot.val()).map((item: any) => ({
-              time: item.time,
-              value: item.value,
-            }))
-          : [];
+            // Query para obtener los últimos 15 registros de humedad
+            const humQuery = query(ref(db, `sensors/${sensorId}/humidity`), limitToLast(15));
+            onValue(humQuery, (humSnapshot) => {
+              const humidity = humSnapshot.exists()
+                ? Object.values(humSnapshot.val()).map((item: any) => ({
+                    time: Number(item.time),
+                    value: item.value,
+                  }))
+                : [];
 
-        setTempData(tempArray);
-        setHumidityData(humidityArray);
-      } catch (error) {
-        console.error("Error fetching data from Realtime Database:", error);
+              updatedSensorData[sensorId] = {
+                temperature: temperature.sort((a, b) => a.time - b.time), // Ordenar por tiempo ascendente
+                humidity: humidity.sort((a, b) => a.time - b.time), // Ordenar por tiempo ascendente
+              };
+
+              setSensorData((prev) => ({
+                ...prev,
+                [sensorId]: updatedSensorData[sensorId],
+              }));
+
+              // Establecer el primer sensor como activo por defecto
+              if (!activeSensor) {
+                setActiveSensor(sensorId);
+              }
+            });
+          });
+        });
+      } else {
+        setSensorData({});
       }
-    };
+    });
 
-    fetchData();
-  }, []);
+    return () => {
+      sensorsListener(); // Detener escucha de sensores
+    };
+  }, [activeSensor]);
+
+  if (activeSensor && sensorData[activeSensor]) {
+    const tempData = sensorData[activeSensor]?.temperature || [];
+    const humidityData = sensorData[activeSensor]?.humidity || [];
+  }
 
   return (
-    <>
-      <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-green-400 text-white rounded-xl p-6 md:col-span-1 flex flex-col justify-center">
-          <h2 className="text-xl font-bold">DANE NOLASCO</h2>
-          <p className="text-sm">Bienvenido a tu Dashboard Principal</p>
-          <div className="flex items-center mt-4 space-x-2 text-lg">
-            <span>Weather</span>
-            <span className="font-bold text-2xl">{tempData[0]?.value || "N/A"}</span>
+    <div className="p-6">
+      {/* Pestañas para seleccionar sensores */}
+      <div className="flex space-x-4 mb-6 overflow-x-auto">
+        {Object.keys(sensorData).map((sensorId) => (
+          <button
+            key={sensorId}
+            className={`px-4 py-2 rounded-lg whitespace-nowrap ${
+              activeSensor === sensorId ? "bg-green-500 text-white" : "bg-gray-200 text-gray-700"
+            }`}
+            onClick={() => setActiveSensor(sensorId)}
+          >
+            Sensor {sensorId}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenido del sensor activo */}
+      {activeSensor && sensorData[activeSensor] && (
+        <div>
+          {/* Tarjetas */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <GaugeCard
+              label="Temperature"
+              value={sensorData[activeSensor]?.temperature[sensorData[activeSensor]?.temperature.length - 1]?.value || 0}
+              unit="°C"
+              icon={<Thermometer className="w-5 h-5 text-green-600" />}
+              color="stroke-green-500"
+            />
+            <GaugeCard
+              label="Humidity"
+              value={sensorData[activeSensor]?.humidity[sensorData[activeSensor]?.humidity.length - 1]?.value || 0}
+              unit="%"
+              icon={<Droplet className="w-5 h-5 text-blue-600" />}
+              color="stroke-blue-500"
+            />
+          </div>
+
+          {/* Gráficos */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="text-lg font-semibold text-green-600 mb-4">Gráfico de Temperatura</h3>
+              <Line
+                data={{
+                  labels: sensorData[activeSensor]?.temperature.map((item) => formatTime(item.time)),
+                  datasets: [
+                    {
+                      label: "Temperatura (°C)",
+                      data: sensorData[activeSensor]?.temperature.map((item) => item.value),
+                      borderColor: "rgba(75, 192, 192, 1)",
+                      backgroundColor: "rgba(75, 192, 192, 0.2)",
+                      tension: 0.4,
+                    },
+                  ],
+                }}
+              />
+            </div>
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="text-lg font-semibold text-green-600 mb-4">Gráfico de Humedad</h3>
+              <Line
+                data={{
+                  labels: sensorData[activeSensor]?.humidity.map((item) => formatTime(item.time)),
+                  datasets: [
+                    {
+                      label: "Humedad (%)",
+                      data: sensorData[activeSensor]?.humidity.map((item) => item.value),
+                      borderColor: "rgba(153, 102, 255, 1)",
+                      backgroundColor: "rgba(153, 102, 255, 0.2)",
+                      tension: 0.4,
+                    },
+                  ],
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Tablas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="text-lg font-semibold text-green-600 mb-4">Temperatura (últimas 15 lecturas)</h3>
+              <table className="w-full text-left text-sm text-gray-700">
+                <thead>
+                  <tr className="border-b">
+                    <th className="pb-2">Hora</th>
+                    <th className="pb-2">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...sensorData[activeSensor]?.temperature].reverse().map((item, idx) => (
+                    <tr key={idx} className="border-b last:border-none">
+                      <td className="py-2">{formatTime(item.time)}</td>
+                      <td className="py-2">{item.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="text-lg font-semibold text-green-600 mb-4">Humedad (últimas 15 lecturas)</h3>
+              <table className="w-full text-left text-sm text-gray-700">
+                <thead>
+                  <tr className="border-b">
+                    <th className="pb-2">Hora</th>
+                    <th className="pb-2">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...sensorData[activeSensor]?.humidity].reverse().map((item, idx) => (
+                    <tr key={idx} className="border-b last:border-none">
+                      <td className="py-2">{formatTime(item.time)}</td>
+                      <td className="py-2">{item.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-        <GaugeCard
-          label="Temperature"
-          value={tempData[0]?.value || 0}
-          unit="°C"
-          icon={<Thermometer className="w-5 h-5 text-green-600" />}
-          color="stroke-green-500"
-        />
-        <GaugeCard
-          label="Lights intensity"
-          value={78}
-          unit="%"
-          icon={<Lightbulb className="w-5 h-5 text-emerald-500" />}
-          color="stroke-emerald-400"
-        />
-      </div>
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Tabla de Temperatura */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-lg font-semibold text-green-600 mb-4">Temperatura (últimas 10 lecturas)</h2>
-          <table className="w-full text-left text-sm text-gray-700">
-            <thead>
-              <tr className="border-b">
-                <th className="pb-2">Hora</th>
-                <th className="pb-2">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tempData.map((item, idx) => (
-                <tr key={idx} className="border-b last:border-none">
-                  <td className="py-2">{item.time}</td>
-                  <td className="py-2">{item.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Tabla de Humedad */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-lg font-semibold text-green-600 mb-4">Humedad (últimas 10 lecturas)</h2>
-          <table className="w-full text-left text-sm text-gray-700">
-            <thead>
-              <tr className="border-b">
-                <th className="pb-2">Hora</th>
-                <th className="pb-2">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {humidityData.map((item, idx) => (
-                <tr key={idx} className="border-b last:border-none">
-                  <td className="py-2">{item.time}</td>
-                  <td className="py-2">{item.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }
