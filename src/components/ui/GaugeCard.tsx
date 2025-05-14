@@ -1,7 +1,7 @@
 // components/GaugeCard.tsx
 import React from "react";
 
-type Props = {
+type GaugeCardProps = {
   label: string;
   value: number;
   unit: string;
@@ -9,39 +9,46 @@ type Props = {
   color: string; // ejemplo: 'stroke-green-500'
 };
 
-export default function GaugeCard({ label, value, unit, icon, color }: Props) {
-  const percent = Math.min(Math.max((value - 10) / 90, 0), 1);
+export default function GaugeCard({ label, value, unit, icon, color }: GaugeCardProps) {
+  const percentage = (value / 100) * 360;
 
   return (
-    <div className="bg-white rounded-xl p-6 text-center shadow relative">
-      <p className="text-gray-600 mb-2 font-medium">{label}</p>
-      <div className="relative flex items-center justify-center">
-        <svg viewBox="0 0 36 36" className="w-28 h-28">
-          <path
-            className="text-gray-200"
-            strokeWidth="3"
+    <div className="bg-card text-card-foreground rounded-xl shadow p-6">
+      <div className="flex items-center gap-2 mb-4">
+        {icon}
+        <span className="font-medium">{label}</span>
+      </div>
+      <div className="relative w-32 h-32 mx-auto mb-4">
+        <svg className="w-full h-full" viewBox="0 0 100 100">
+          {/* Background circle */}
+          <circle
+            cx="50"
+            cy="50"
+            r="45"
             fill="none"
-            stroke="currentColor"
-            d="M18 2.0845
-               a 15.9155 15.9155 0 0 1 0 31.831
-               a 15.9155 15.9155 0 0 1 0 -31.831"
+            stroke="hsl(var(--secondary))"
+            strokeWidth="10"
           />
-          <path
-            className={color}
-            strokeWidth="3"
+          {/* Progress circle */}
+          <circle
+            cx="50"
+            cy="50"
+            r="45"
             fill="none"
+            className={color}
+            strokeWidth="10"
             strokeLinecap="round"
-            d="M18 2.0845
-               a 15.9155 15.9155 0 0 1 0 31.831"
-            strokeDasharray={`${percent * 100}, 100`}
-            transform="rotate(-90 18 18)"
+            strokeDasharray={`${(percentage / 360) * 283} 283`}
+            transform="rotate(-90 50 50)"
           />
         </svg>
-        <div className="absolute text-2xl font-semibold">{value}{unit}</div>
-        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2">
-          {icon}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-2xl font-bold">
+            {value}
+            {unit}
+          </span>
         </div>
       </div>
     </div>
-  );
+  )
 }

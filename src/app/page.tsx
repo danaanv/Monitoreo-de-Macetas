@@ -1,5 +1,3 @@
-// app/dashboard/page.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -8,7 +6,7 @@ import Sidebar from "../components/ui/Sidebar";
 import PrincipalContent from "@/components/pages/PrincipalContent";
 import DevicesContent from "@/components/pages/DevicesContent";
 import StatisticsContent from "@/components/pages/StatisticsContent";
-
+import ProfileContent from "@/components/pages/ProfileContent";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("PRINCIPAL");
@@ -17,16 +15,19 @@ export default function Dashboard() {
     switch (activeTab) {
       case "PRINCIPAL":
         return <PrincipalContent />;
-      case "DISPOSITIVOS":
+      case "DEVICES":
         return <DevicesContent />;
-      case "ESTADISTICAS":
-      default:
+      case "STATISTICS":
         return <StatisticsContent />;
+      case "PROFILE":
+        return <ProfileContent />;
+      default:
+        return <PrincipalContent />;
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F0F5F0] font-sans">
+    <div className="min-h-screen flex bg-background font-sans antialiased">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex-1 flex flex-col">
         <NavigationBar />
