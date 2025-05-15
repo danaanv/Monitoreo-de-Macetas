@@ -131,7 +131,7 @@ export default function StatisticsContent() {
             }`}
             onClick={() => setActiveSensor(sensorId)}
           >
-            {t.activeDevices} {sensorId}
+            {t.activeDevices} Sensor {sensorId.match(/\d+/)?.[0]}
           </button>
         ))}
       </div>

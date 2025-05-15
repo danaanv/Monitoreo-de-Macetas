@@ -5,7 +5,6 @@ import { Droplet } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAppContext } from "@/contexts/AppContext";
 import { translations } from "@/lib/i18n";
-import { Language } from "@/types/app";
 import { Icons } from "@/components/icons";
 
 export default function NavigationBar() {
