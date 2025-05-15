@@ -6,7 +6,6 @@ import Sidebar from "../components/ui/Sidebar";
 import PrincipalContent from "@/components/pages/PrincipalContent";
 import DevicesContent from "@/components/pages/DevicesContent";
 import StatisticsContent from "@/components/pages/StatisticsContent";
-import ProfileContent from "@/components/pages/ProfileContent";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("PRINCIPAL");
@@ -19,8 +18,6 @@ export default function Dashboard() {
         return <DevicesContent />;
       case "STATISTICS":
         return <StatisticsContent />;
-      case "PROFILE":
-        return <ProfileContent />;
       default:
         return <PrincipalContent />;
     }

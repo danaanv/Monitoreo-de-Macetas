@@ -1,36 +1,14 @@
 import { useState, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "@/firebaseConfig";
-import { 
-  Settings,
-  SunMedium,
-  Moon,
-  Droplet,
-  UserCircle 
-} from "lucide-react";
+import { Droplet } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAppContext } from "@/contexts/AppContext";
 import { translations } from "@/lib/i18n";
 import { Language } from "@/types/app";
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./dropdown-menu";
-
-interface UserProfile {
-  name: string;
-  role: string;
-  email: string;
-}
+import { Icons } from "@/components/icons";
 
 export default function NavigationBar() {
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    name: "Admin",
-    role: "Administrator",
-    email: "admin@example.com"
-  });
   const [sensorCount, setSensorCount] = useState(0);
   const [mounted, setMounted] = useState(false);
   const { language, setLanguage } = useAppContext();
@@ -56,19 +34,15 @@ export default function NavigationBar() {
   }
 
   return (
-    <header className="bg-white dark:bg-gray-800 shadow px-6 py-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
-      <div className="flex items-center space-x-4">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-700 dark:text-gray-200">{userProfile.name}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{userProfile.role}</p>
-        </div>
+    <header className="bg-white dark:bg-gray-800 shadow px-6 py-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">      <div className="flex items-center space-x-4">
+        <h1 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Monitoreo de Macetas</h1>
       </div>
 
       <div className="flex items-center space-x-6">
         {/* Sensor counter */}
         <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-300">
           <Droplet className="w-5 h-5" />
-          <span>{translations[language].activeSensors}: {sensorCount}</span>
+          <span>{translations[language].activeDevices}: {sensorCount}</span>
         </div>
 
         {/* Theme toggle */}
@@ -77,7 +51,7 @@ export default function NavigationBar() {
           className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
           aria-label={translations[language].toggleTheme}
         >
-          {theme === "dark" ? <SunMedium className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          {theme === "dark" ? <Icons.light className="w-5 h-5" /> : <Icons.dark className="w-5 h-5" />}
         </button>
 
         {/* Language selector */}
@@ -88,22 +62,6 @@ export default function NavigationBar() {
         >
           {language.toUpperCase()}
         </button>
-
-        {/* Settings dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
-              <Settings className="w-5 h-5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem className="flex items-center space-x-2">
-              <UserCircle className="w-4 h-4" />
-              <span>{translations[language].profile}</span>
-            </DropdownMenuItem>
-            {/* Add more menu items as needed */}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   );

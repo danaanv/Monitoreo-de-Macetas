@@ -2,7 +2,6 @@ import {
   Home,
   Monitor,
   BarChart2,
-  UserCircle,
   LineChart,
 } from "lucide-react";
 import { useAppContext } from "@/contexts/AppContext";
@@ -12,7 +11,6 @@ const getTabs = (t: any) => [
   { icon: <Home className="w-5 h-5" />, label: "PRINCIPAL", title: t.principal },
   { icon: <Monitor className="w-5 h-5" />, label: "DEVICES", title: t.devices },
   { icon: <BarChart2 className="w-5 h-5" />, label: "STATISTICS", title: t.statistics },
-  { icon: <UserCircle className="w-5 h-5" />, label: "PROFILE", title: t.profile },
 ];
 
 type Props = {
@@ -49,4 +47,3 @@ export default function Sidebar({ activeTab, onTabChange }: Props) {
     </aside>
   );
 }
-  
