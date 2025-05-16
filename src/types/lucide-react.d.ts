@@ -12,4 +12,7 @@ declare module 'lucide-react' {
   export const Monitor: FC<IconProps>;
   export const BarChart2: FC<IconProps>;
   export const LineChart: FC<IconProps>;
+  export const ChevronLeft: FC<IconProps>;
+  export const Info: FC<IconProps>;
+  export const X: FC<IconProps>;
 }
