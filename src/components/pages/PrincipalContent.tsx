@@ -63,6 +63,22 @@ export default function PrincipalContent() {
     }).format(date);
   };
 
+  // Set initial active sensor
+  useEffect(() => {
+    const sensorsRef = ref(db, "sensors");
+    const initialSensorListener = onValue(sensorsRef, (snapshot) => {
+      if (snapshot.exists() && !activeSensor) {
+        const firstSensor = Object.keys(snapshot.val())[0];
+        setActiveSensor(firstSensor);
+      }
+    });
+
+    return () => {
+      off(sensorsRef, 'value', initialSensorListener);
+    };
+  }, []); // Solo se ejecuta una vez al montar el componente
+
+  // Listen for sensor data updates
   useEffect(() => {
     const sensorsRef = ref(db, "sensors");
     const sensorsListener = onValue(sensorsRef, (snapshot) => {
@@ -100,11 +116,6 @@ export default function PrincipalContent() {
                 ...prev,
                 [sensorId]: updatedSensorData[sensorId],
               }));
-
-              // Set first sensor as active by default
-              if (!activeSensor) {
-                setActiveSensor(sensorId);
-              }
             });
 
             return () => {
@@ -124,7 +135,9 @@ export default function PrincipalContent() {
     return () => {
       off(sensorsRef, 'value', sensorsListener);
     };
-  }, [activeSensor]);  const chartOptions = {
+  }, []); // No incluimos activeSensor en las dependencias
+
+  const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
