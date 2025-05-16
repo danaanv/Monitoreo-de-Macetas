@@ -18,10 +18,46 @@ interface DeviceData {
   avgTemperature?: number;
 }
 
-const getHumidityState = (humidity: number) => {
-  if (humidity < 300) return "Seco";
-  if (humidity < 600) return "Húmedo";
-  return "Mojado";
+interface HumidityState {
+  state: string;
+  message: string;
+  emoji: string;
+}
+
+const getHumidityState = (humidity: number): HumidityState => {
+  if (humidity < 120) {
+    return {
+      state: "Muy seco",
+      message: "¡Tu planta tiene sed! Necesita agua urgentemente.",
+      emoji: "💧"
+    };
+  }
+  if (humidity < 240) {
+    return {
+      state: "Poco húmedo",
+      message: "La tierra está un poco seca. Considera regar pronto.",
+      emoji: "💧💧"
+    };
+  }
+  if (humidity < 420) {
+    return {
+      state: "Húmedo",
+      message: "La humedad es ideal. ¡Tu planta está feliz!",
+      emoji: "💧💧💧"
+    };
+  }
+  if (humidity < 540) {
+    return {
+      state: "Muy húmedo",
+      message: "La tierra está bastante húmeda. ¡Cuidado con el exceso de agua!",
+      emoji: "💧💧💧💧"
+    };
+  }
+  return {
+    state: "Saturado",
+    message: "¡Demasiada agua! Podría ser malo para las raíces en algunos casos.",
+    emoji: "💧💧💧💧💧"
+  };
 };
 
 type MockDataType = {
@@ -144,10 +180,10 @@ export default function DevicesContent() {
                             y={110 - (mockData[selectedDevice].temperature * 3.33)} 
                             width="6" 
                             height={mockData[selectedDevice].temperature * 3.33} 
-                            fill="#ef4444" 
+                            fill="hsl(var(--success))" 
                             rx="3" 
                           />
-                          <circle cx="20" cy="100" r="8" fill="#ef4444" />
+                          <circle cx="20" cy="100" r="8" fill="hsl(var(--success))" />
                           {/* Marcas de temperatura */}
                           {[0, 10, 20, 30].map((temp) => (
                             <g key={temp}>
@@ -202,21 +238,37 @@ export default function DevicesContent() {
                         />
                         <defs>
                           <linearGradient id="gradient">
-                            <stop offset="0%" stopColor="#ef4444" />
-                            <stop offset="50%" stopColor="#22c55e" />
-                            <stop offset="100%" stopColor="#3b82f6" />
+                            <stop offset="0%" stopColor="hsl(120, 61%, 34%)" />
+                            <stop offset="50%" stopColor="hsl(120, 61%, 41%)" />
+                            <stop offset="100%" stopColor="hsl(120, 61%, 48%)" />
                           </linearGradient>
                         </defs>
                       </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-2xl font-bold">{mockData[selectedDevice].humidity}</span>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold">
+                          {mockData[selectedDevice].humidity > 600 
+                            ? '> 100' 
+                            : ((mockData[selectedDevice].humidity / 600) * 100).toFixed(1)}%
+                        </span>
+                        <span className="text-sm text-muted-foreground">de la tierra</span>
                       </div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-sm text-muted-foreground mb-1">Estado:</div>
-                      <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                        {getHumidityState(mockData[selectedDevice].humidity)}
-                      </span>
+                    <div className="text-center space-y-2">
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">Estado:</div>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                            {getHumidityState(mockData[selectedDevice].humidity).emoji} {getHumidityState(mockData[selectedDevice].humidity).state}
+                          </span>
+                          <p className="text-sm text-muted-foreground">
+                            {getHumidityState(mockData[selectedDevice].humidity).message}
+                          </p>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Tipo de Planta y Estado de Humedad Ideal:</p>
+                        <p className="text-sm text-muted-foreground">Plantas de interior: 40-70%</p>
+                      </div>
                     </div>
                   </Card>
                 </div>
