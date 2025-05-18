@@ -2,7 +2,7 @@ import { useAppContext } from "@/contexts/AppContext";
 import { translations } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Thermometer, Droplet, ChevronLeft, Info, X } from "lucide-react";
 import {
   Dialog,
@@ -11,6 +11,8 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
+import { ref, onValue, query, limitToLast, off } from "firebase/database";
+import { db } from "@/firebaseConfig";
 
 interface DeviceData {
   temperature: number;
@@ -67,15 +69,70 @@ type MockDataType = {
 export default function DevicesContent() {
   const { language } = useAppContext();
   const t = translations[language];
-  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState<string | null>(null); // Estado inicial null
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [sensorsData, setSensorsData] = useState<{ [key: string]: DeviceData }>({});
 
-  // Datos de ejemplo - en producción vendrían de Firebase
-  const mockData: MockDataType = {
-    "device1": { temperature: 12, humidity: 107, avgTemperature: 15 },
-    "device2": { temperature: 15, humidity: 450, avgTemperature: 17 },
-  };
+  // Referencia a la base de datos
+  const sensorsRef = useRef(ref(db, "sensors"));
+
+  // Escuchar cambios en tiempo real
+  useEffect(() => {
+    const listeners: { [key: string]: () => void } = {};
+
+    const sensorsListener = onValue(sensorsRef.current, (snapshot) => {
+      if (snapshot.exists()) {
+        const sensors = Object.keys(snapshot.val());
+        
+        sensors.forEach(sensorId => {
+          // Listener para temperatura
+          const tempRef = ref(db, `sensors/${sensorId}/temperature`);
+          const tempQuery = query(tempRef, limitToLast(1));
+          
+          const tempListener = onValue(tempQuery, snapshot => {
+            if (snapshot.exists()) {
+              const tempData = Object.values(snapshot.val())[0] as any;
+              setSensorsData(prev => ({
+                ...prev,
+                [sensorId]: {
+                  ...prev[sensorId],
+                  temperature: tempData.value,
+                }
+              }));
+            }
+          });
+
+          // Listener para humedad
+          const humRef = ref(db, `sensors/${sensorId}/humidity`);
+          const humQuery = query(humRef, limitToLast(1));
+          
+          const humListener = onValue(humQuery, snapshot => {
+            if (snapshot.exists()) {
+              const humData = Object.values(snapshot.val())[0] as any;
+              setSensorsData(prev => ({
+                ...prev,
+                [sensorId]: {
+                  ...prev[sensorId],
+                  humidity: humData.value,
+                  avgTemperature: prev[sensorId]?.temperature || 0, // Mantenemos el promedio por ahora
+                }
+              }));
+            }
+          });
+
+          listeners[`temp_${sensorId}`] = () => off(tempQuery, 'value', tempListener);
+          listeners[`hum_${sensorId}`] = () => off(humQuery, 'value', humListener);
+        });
+      }
+    });
+
+    // Limpieza de listeners
+    return () => {
+      Object.values(listeners).forEach(cleanup => cleanup());
+      off(sensorsRef.current, 'value', sensorsListener);
+    };
+  }, []);
 
   const floors = [
     { id: "floor1", name: "Primer Piso" },
@@ -115,11 +172,11 @@ export default function DevicesContent() {
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <h2 className="text-xl font-medium">Volver</h2>
+          <h2 className="text-xl font-medium">{currentFloor?.name}</h2>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(mockData).map(([deviceId, data]) => (
+          {Object.entries(sensorsData).map(([deviceId, data]) => (
             <Card 
               key={deviceId}
               className={`p-4 cursor-pointer transition-colors hover:border-primary ${
@@ -151,7 +208,7 @@ export default function DevicesContent() {
         </Card>
 
         <Card className="p-6">
-          {selectedDevice ? (
+          {selectedDevice && sensorsData[selectedDevice] ? (
             <div className="space-y-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold">Maceta {selectedDevice}</h2>
@@ -177,9 +234,9 @@ export default function DevicesContent() {
                           {/* Mercurio */}
                           <rect 
                             x="17" 
-                            y={110 - (mockData[selectedDevice].temperature * 3.33)} 
+                            y={110 - (sensorsData[selectedDevice].temperature * 3.33)} 
                             width="6" 
-                            height={mockData[selectedDevice].temperature * 3.33} 
+                            height={sensorsData[selectedDevice].temperature * 3.33} 
                             fill="hsl(var(--success))" 
                             rx="3" 
                           />
@@ -212,9 +269,11 @@ export default function DevicesContent() {
                       </div>
                     </div>
                     <div className="text-center mt-4">
-                      <div className="text-2xl font-bold">{mockData[selectedDevice].temperature}°C</div>
+                      <div className="text-2xl font-bold">
+                        {sensorsData[selectedDevice].temperature.toFixed(1)}°C
+                      </div>
                       <div className="text-sm text-muted-foreground mt-2">
-                        Promedio semanal: {mockData[selectedDevice].avgTemperature}°C
+                        Promedio: {(sensorsData[selectedDevice].avgTemperature ?? 0).toFixed(1)}°C
                       </div>
                     </div>
                   </Card>
@@ -234,7 +293,7 @@ export default function DevicesContent() {
                           fill="none"
                           strokeWidth="6"
                           stroke="url(#gradient)"
-                          strokeDasharray={`${(mockData[selectedDevice].humidity / 1000) * 126} 126`}
+                          strokeDasharray={`${(sensorsData[selectedDevice].humidity / 1000) * 126} 126`}
                         />
                         <defs>
                           <linearGradient id="gradient">
@@ -246,9 +305,9 @@ export default function DevicesContent() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <span className="text-2xl font-bold">
-                          {mockData[selectedDevice].humidity > 600 
+                          {sensorsData[selectedDevice].humidity > 600 
                             ? '> 100' 
-                            : ((mockData[selectedDevice].humidity / 600) * 100).toFixed(1)}%
+                            : ((sensorsData[selectedDevice].humidity / 600) * 100).toFixed(1)}%
                         </span>
                         <span className="text-sm text-muted-foreground">de la tierra</span>
                       </div>
@@ -258,10 +317,10 @@ export default function DevicesContent() {
                         <div className="text-sm text-muted-foreground mb-1">Estado:</div>
                         <div className="flex flex-col items-center gap-1">
                           <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                            {getHumidityState(mockData[selectedDevice].humidity).emoji} {getHumidityState(mockData[selectedDevice].humidity).state}
+                            {getHumidityState(sensorsData[selectedDevice].humidity).emoji} {getHumidityState(sensorsData[selectedDevice].humidity).state}
                           </span>
                           <p className="text-sm text-muted-foreground">
-                            {getHumidityState(mockData[selectedDevice].humidity).message}
+                            {getHumidityState(sensorsData[selectedDevice].humidity).message}
                           </p>
                         </div>
                       </div>

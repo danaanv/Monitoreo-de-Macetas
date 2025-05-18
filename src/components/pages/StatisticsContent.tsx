@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ref, onValue, query, limitToLast } from "firebase/database";
 import { db } from "@/firebaseConfig";
 import { useAppContext } from "@/contexts/AppContext";
@@ -22,6 +22,7 @@ export default function StatisticsContent() {
   const t = translations[language];
   const [sensorData, setSensorData] = useState<{ [sensorId: string]: { temperature: SensorData[]; humidity: SensorData[] } }>({});
   const [activeSensor, setActiveSensor] = useState<string | null>(null);
+  const activeSensorRef = useRef<string | null>(null);
 
   // Función para convertir el timestamp a la hora local de Perú
   const formatTime = (timestamp: number) => {
@@ -66,6 +67,11 @@ export default function StatisticsContent() {
     };
   };
 
+  // Update ref when active sensor changes
+  useEffect(() => {
+    activeSensorRef.current = activeSensor;
+  }, [activeSensor]);
+
   useEffect(() => {
     const sensorsRef = ref(db, "sensors");
     const sensorsListener = onValue(sensorsRef, (snapshot) => {
@@ -92,17 +98,16 @@ export default function StatisticsContent() {
                   }))
                 : [];
 
-              updatedSensorData[sensorId] = {
-                temperature: temperature.sort((a, b) => a.time - b.time),
-                humidity: humidity.sort((a, b) => a.time - b.time),
-              };
-
               setSensorData((prev) => ({
                 ...prev,
-                [sensorId]: updatedSensorData[sensorId],
+                [sensorId]: {
+                  temperature: temperature.sort((a, b) => a.time - b.time),
+                  humidity: humidity.sort((a, b) => a.time - b.time),
+                },
               }));
 
-              if (!activeSensor) {
+              // Solo establecer el sensor activo si no hay ninguno seleccionado
+              if (activeSensorRef.current === null) {
                 setActiveSensor(sensorId);
               }
             });
@@ -116,7 +121,7 @@ export default function StatisticsContent() {
     return () => {
       sensorsListener();
     };
-  }, [activeSensor]);
+  }, []); // Removida la dependencia de activeSensor
 
   return (
     <div className="p-6">

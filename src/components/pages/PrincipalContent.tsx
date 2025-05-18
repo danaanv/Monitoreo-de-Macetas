@@ -3,7 +3,7 @@ import { useAppContext } from "@/contexts/AppContext";
 import { translations } from "@/lib/i18n";
 import GaugeCard from "@/components/ui/GaugeCard";
 import { Thermometer, Droplet } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ref, onValue, query, limitToLast, off } from "firebase/database";
 import { db } from "@/firebaseConfig";
 import { Line } from "react-chartjs-2";
@@ -35,20 +35,25 @@ interface SensorDataPoint {
   value: number;
 }
 
-interface SensorData {
-  [sensorId: string]: {
-    temperature: SensorDataPoint[];
-    humidity: SensorDataPoint[];
-  };
+interface SensorTypeData {
+  temperature: SensorDataPoint[];
+  humidity: SensorDataPoint[];
+}
+
+interface SensorsDataType {
+  [key: string]: SensorTypeData;
 }
 
 export default function PrincipalContent() {
   const { language } = useAppContext();
   const { theme } = useTheme();
   const t = translations[language];
-  const [sensorData, setSensorData] = useState<SensorData>({});
+  const [sensorIds, setSensorIds] = useState<string[]>([]);
+  const [sensorsData, setSensorsData] = useState<SensorsDataType>({});
   const [activeSensor, setActiveSensor] = useState<string | null>(null);
+  const activeSensorRef = useRef<string | null>(null); // Add this line
   const isDarkMode = theme === "dark";
+  const sensorsRef = useRef(ref(db, "sensors"));
 
   // Format time to Peru local time
   const formatTime = (timestamp: number) => {
@@ -63,81 +68,90 @@ export default function PrincipalContent() {
     }).format(date);
   };
 
-  // Set initial active sensor
+  // Update ref when active sensor changes
   useEffect(() => {
-    const sensorsRef = ref(db, "sensors");
-    const initialSensorListener = onValue(sensorsRef, (snapshot) => {
-      if (snapshot.exists() && !activeSensor) {
-        const firstSensor = Object.keys(snapshot.val())[0];
-        setActiveSensor(firstSensor);
+    activeSensorRef.current = activeSensor;
+  }, [activeSensor]);
+
+  // Listen for available sensors
+  useEffect(() => {
+    const listener = onValue(sensorsRef.current, (snapshot) => {
+      if (snapshot.exists()) {
+        const sensors = Object.keys(snapshot.val());
+        setSensorIds(sensors);
+        if (activeSensorRef.current === null && sensors.length > 0) {
+          setActiveSensor(sensors[0]);
+        }
+      } else {
+        setSensorIds([]);
       }
     });
 
-    return () => {
-      off(sensorsRef, 'value', initialSensorListener);
-    };
-  }, []); // Solo se ejecuta una vez al montar el componente
+    return () => off(sensorsRef.current, 'value', listener);
+  }, []); // Removemos activeSensor de las dependencias
 
   // Listen for sensor data updates
   useEffect(() => {
-    const sensorsRef = ref(db, "sensors");
-    const sensorsListener = onValue(sensorsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const sensors = snapshot.val();
-        const updatedSensorData: SensorData = {};
+    if (!sensorIds.length) return;
 
-        Object.keys(sensors).forEach((sensorId) => {
-          // Get temperature data
-          const tempQuery = query(ref(db, `sensors/${sensorId}/temperature`), limitToLast(15));
-          const tempListener = onValue(tempQuery, (tempSnapshot) => {
-            const temperature = tempSnapshot.exists()
-              ? Object.values(tempSnapshot.val()).map((item: any) => ({
-                  time: Number(item.time),
-                  value: item.value,
-                }))
-              : [];
+    const listeners: { [key: string]: () => void } = {};
 
-            // Get humidity data
-            const humQuery = query(ref(db, `sensors/${sensorId}/humidity`), limitToLast(15));
-            const humListener = onValue(humQuery, (humSnapshot) => {
-              const humidity = humSnapshot.exists()
-                ? Object.values(humSnapshot.val()).map((item: any) => ({
-                    time: Number(item.time),
-                    value: item.value,
-                  }))
-                : [];
+    sensorIds.forEach(sensorId => {
+      const updateSensorData = (type: 'temperature' | 'humidity', data: SensorDataPoint[]) => {
+        setSensorsData(prev => ({
+          ...prev,
+          [sensorId]: {
+            ...(prev[sensorId] || {}),
+            [type]: data
+          }
+        }));
+      };
 
-              updatedSensorData[sensorId] = {
-                temperature: temperature.sort((a, b) => a.time - b.time),
-                humidity: humidity.sort((a, b) => a.time - b.time),
-              };
+      // Temperature listener
+      const tempRef = ref(db, `sensors/${sensorId}/temperature`);
+      const tempQuery = query(tempRef, limitToLast(15));
+      
+      const tempListener = onValue(tempQuery, snapshot => {
+        if (snapshot.exists()) {
+          const data = Object.values(snapshot.val())
+            .map((item: any) => ({
+              time: Number(item.time),
+              value: item.value,
+            }))
+            .sort((a, b) => a.time - b.time);
 
-              setSensorData((prev) => ({
-                ...prev,
-                [sensorId]: updatedSensorData[sensorId],
-              }));
-            });
+          updateSensorData('temperature', data);
+        }
+      });
 
-            return () => {
-              off(humQuery, 'value', humListener);
-            };
-          });
+      // Humidity listener
+      const humRef = ref(db, `sensors/${sensorId}/humidity`);
+      const humQuery = query(humRef, limitToLast(15));
+      
+      const humListener = onValue(humQuery, snapshot => {
+        if (snapshot.exists()) {
+          const data = Object.values(snapshot.val())
+            .map((item: any) => ({
+              time: Number(item.time),
+              value: item.value,
+            }))
+            .sort((a, b) => a.time - b.time);
 
-          return () => {
-            off(tempQuery, 'value', tempListener);
-          };
-        });
-      } else {
-        setSensorData({});
-      }
+          updateSensorData('humidity', data);
+        }
+      });
+
+      listeners[`temp_${sensorId}`] = () => off(tempQuery, 'value', tempListener);
+      listeners[`hum_${sensorId}`] = () => off(humQuery, 'value', humListener);
     });
 
+    // Cleanup function
     return () => {
-      off(sensorsRef, 'value', sensorsListener);
+      Object.values(listeners).forEach(cleanup => cleanup());
     };
-  }, []); // No incluimos activeSensor en las dependencias
+  }, [sensorIds]); // Remove any other dependencies
 
-  const chartOptions = {
+  const baseChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
@@ -145,33 +159,10 @@ export default function PrincipalContent() {
         grid: {
           display: true,
           color: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
-          borderColor: isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
-          tickColor: isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
-          drawBorder: false
-        },
-        ticks: {
-          color: isDarkMode ? "rgba(27, 14, 14, 0.8)" : "rgba(7, 4, 4, 0.7)",
-          font: {
-            size: 11
-          }
-        }
-      },
-      y: {
-        grid: {
-          display: true,
-          color: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
-          borderColor: isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
-          tickColor: isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
-          drawBorder: false
-        },
-        ticks: {
-          color: isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.7)",
-          font: {
-            size: 11
-          }
         }
       }
-    },    plugins: {
+    },
+    plugins: {
       legend: {
         labels: {
           color: isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.7)",
@@ -184,25 +175,46 @@ export default function PrincipalContent() {
         backgroundColor: isDarkMode ? "rgba(0, 0, 0, 0.8)" : "rgba(255, 255, 255, 0.8)",
         titleColor: isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.8)",
         bodyColor: isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.8)",
-        borderColor: isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
         padding: 12,
         cornerRadius: 4
       }
     }
   };
 
-  const temperatureOptions = {
-    ...chartOptions
+  const tempChartOptions = {
+    ...baseChartOptions,
+    scales: {
+      ...baseChartOptions.scales,
+      y: {
+        grid: {
+          display: true,
+          color: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
+        },
+        min: 0,
+        max: 45,
+      }
+    }
   };
 
-  const humidityOptions = {
-    ...chartOptions
+  const humidityChartOptions = {
+    ...baseChartOptions,
+    scales: {
+      ...baseChartOptions.scales,
+      y: {
+        grid: {
+          display: true,
+          color: isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
+        },
+        min: 0,
+        max: 800,
+      }
+    }
   };
 
   // Get current sensor data
-  const currentSensorData = activeSensor ? sensorData[activeSensor] : null;
-  const lastTemp = currentSensorData?.temperature?.[currentSensorData.temperature.length - 1]?.value ?? 0;
-  const lastHumidity = currentSensorData?.humidity?.[currentSensorData.humidity.length - 1]?.value ?? 0;
+  const currentSensorData = activeSensor ? sensorsData[activeSensor] : null;
+  const lastTemp = currentSensorData?.temperature?.[currentSensorData.temperature?.length - 1]?.value ?? 0;
+  const lastHumidity = currentSensorData?.humidity?.[currentSensorData.humidity?.length - 1]?.value ?? 0;
 
   return (
     <div className="p-6">
@@ -210,7 +222,7 @@ export default function PrincipalContent() {
       
       {/* Sensor tabs */}
       <div className="flex space-x-4 mb-6 overflow-x-auto">
-        {Object.keys(sensorData).map((sensorId) => (
+        {sensorIds.map((sensorId) => (
           <button
             key={sensorId}
             className={`px-4 py-2 rounded-lg whitespace-nowrap ${
@@ -252,21 +264,24 @@ export default function PrincipalContent() {
             <div className="bg-card text-card-foreground rounded-xl shadow p-6 flex flex-col">
               <h3 className="text-lg font-semibold text-primary mb-4">{t.temperatureChart}</h3>
               <div className="h-[400px] w-full">
-                <Line
-                  data={{
-                    labels: currentSensorData.temperature.map((item) => formatTime(item.time)),
-                    datasets: [{                      label: `${t.temperature} (°C)`,
-                      data: currentSensorData.temperature.map((item) => item.value),
-                      borderColor: "#22c55e",
-                      backgroundColor: "#22c55e20",
-                      borderWidth: 2,
-                      tension: 0.4,
-                      pointBackgroundColor: "#22c55e",
-                      pointBorderColor: "#22c55e",
-                    }],
-                  }}
-                  options={temperatureOptions}
-                />
+                {currentSensorData.temperature && (
+                  <Line
+                    data={{
+                      labels: currentSensorData.temperature.map(item => formatTime(item.time)),
+                      datasets: [{
+                        label: `${t.temperature} (°C)`,
+                        data: currentSensorData.temperature.map(item => item.value),
+                        borderColor: "#22c55e",
+                        backgroundColor: "#22c55e20",
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointBackgroundColor: "#22c55e",
+                        pointBorderColor: "#22c55e",
+                      }],
+                    }}
+                    options={tempChartOptions}
+                  />
+                )}
               </div>
             </div>
 
@@ -274,21 +289,24 @@ export default function PrincipalContent() {
             <div className="bg-card text-card-foreground rounded-xl shadow p-6 flex flex-col">
               <h3 className="text-lg font-semibold text-info mb-4">{t.humidityChart}</h3>
               <div className="h-[400px] w-full">
-                <Line
-                  data={{
-                    labels: currentSensorData.humidity.map((item) => formatTime(item.time)),
-                    datasets: [{                      label: `${t.humidity} (%)`,
-                      data: currentSensorData.humidity.map((item) => item.value),
-                      borderColor: "#3b82f6",
-                      backgroundColor: "#3b82f620",
-                      borderWidth: 2,
-                      tension: 0.4,
-                      pointBackgroundColor: "#3b82f6",
-                      pointBorderColor: "#3b82f6",
-                    }],
-                  }}
-                  options={humidityOptions}
-                />
+                {currentSensorData.humidity && (
+                  <Line
+                    data={{
+                      labels: currentSensorData.humidity.map(item => formatTime(item.time)),
+                      datasets: [{
+                        label: `${t.humidity} (%)`,
+                        data: currentSensorData.humidity.map(item => item.value),
+                        borderColor: "#3b82f6",
+                        backgroundColor: "#3b82f620",
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointBackgroundColor: "#3b82f6",
+                        pointBorderColor: "#3b82f6",
+                      }],
+                    }}
+                    options={humidityChartOptions}
+                  />
+                )}
               </div>
             </div>
           </div>
