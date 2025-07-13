@@ -69,12 +69,9 @@ type MockDataType = {
 export default function DevicesContent() {
   const { language } = useAppContext();
   const t = translations[language];
-  const [selectedFloor, setSelectedFloor] = useState<string | null>(null); // Estado inicial null
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [sensorsData, setSensorsData] = useState<{ [key: string]: DeviceData }>({});
-
-  // Referencia a la base de datos
   const sensorsRef = useRef(ref(db, "sensors"));
 
   // Escuchar cambios en tiempo real
@@ -134,79 +131,41 @@ export default function DevicesContent() {
     };
   }, []);
 
-  const floors = [
-    { id: "floor1", name: "Primer Piso" },
-    { id: "floor2", name: "Segundo Piso" },
-    { id: "floor3", name: "Tercer Piso" }
-  ];
-
-  const handleBack = () => {
-    setSelectedFloor(null);
-    setSelectedDevice(null);
-  };
-
-  const renderFloorSelection = () => (
-    <div className="grid grid-cols-1 gap-4 w-full max-w-md mx-auto">
-      {floors.map((floor) => (
-        <button
-          key={floor.id}
-          className="p-4 border-2 border-border rounded-lg text-center transition-colors hover:border-primary w-full"
-          onClick={() => setSelectedFloor(floor.id)}
-        >
-          <span className="text-lg font-medium">{floor.name}</span>
-        </button>
-      ))}
+  // Renderizar todas las macetas disponibles
+  const renderDevices = () => (
+    <div className="w-full">
+      <h2 className="text-xl font-medium mb-6">Macetas activas</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Object.entries(sensorsData).map(([deviceId, data]) => (
+          <Card 
+            key={deviceId}
+            className={`p-4 cursor-pointer transition-colors hover:border-primary ${
+              selectedDevice === deviceId ? 'border-primary bg-primary/10' : ''
+            }`}
+            onClick={() => {
+              if (selectedDevice === deviceId) {
+                setSelectedDevice(null);
+              } else {
+                setSelectedDevice(deviceId);
+              }
+            }}
+          >
+            <h3 className="font-semibold text-center">
+              Maceta {deviceId.match(/\d+/) ? deviceId.match(/\d+/)![0] : deviceId}
+            </h3>
+          </Card>
+        ))}
+      </div>
     </div>
   );
-
-  const renderFloorDevices = () => {
-    const currentFloor = floors.find(f => f.id === selectedFloor);
-    return (
-      <div className="w-full">
-        <div className="flex items-center gap-4 mb-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleBack}
-            className="hover:bg-primary/10"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <h2 className="text-xl font-medium">{currentFloor?.name}</h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(sensorsData).map(([deviceId, data]) => (
-            <Card 
-              key={deviceId}
-              className={`p-4 cursor-pointer transition-colors hover:border-primary ${
-                selectedDevice === deviceId ? 'border-primary bg-primary/10' : ''
-              }`}
-              onClick={() => {
-                if (selectedDevice === deviceId) {
-                  setSelectedDevice(null);
-                } else {
-                  setSelectedDevice(deviceId);
-                }
-              }}
-            >
-              <h3 className="font-semibold text-center">Maceta {deviceId}</h3>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-3xl font-bold">{t.devices}</h1>
-      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="p-6">
-          {selectedFloor ? renderFloorDevices() : renderFloorSelection()}
+          {renderDevices()}
         </Card>
-
         <Card className="p-6">
           {selectedDevice && sensorsData[selectedDevice] ? (
             <div className="space-y-6">
